@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Z.ai Quota Window Status</title>
+    <style>
+        :root {
+            --bg-main: #0B0E1A;
+            --card-bg: #121626;
+            --border-ui: #1E263D;
+            --text-primary: #F4F5FF;
+            --text-secondary: #809AFF;
+            --text-muted: #476FDE;
+            --cyan-glow: #00F0FF;
+            --peak-alert: #FF4A5A;
+            --offpeak-ok: #00E699;
+        }
+
+        body {
+            background-color: var(--bg-main);
+            color: var(--text-primary);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 24px;
+            box-sizing: border-box;
+        }
+
+        .status-container {
+            background: var(--card-bg);
+            border: 1px solid var(--border-ui);
+            border-radius: 8px;
+            padding: 48px 32px;
+            max-width: 460px;
+            width: 100%;
+            box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
+            text-align: center;
+            position: relative;
+        }
+
+        /* Accent top accent stripe mimicking official dev dashboard profiles */
+        .status-container::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, var(--text-muted), var(--cyan-glow));
+            border-radius: 8px 8px 0 0;
+        }
+
+        .header-label {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 0.25em;
+            color: var(--text-secondary);
+            margin-bottom: 8px;
+            font-weight: 700;
+        }
+
+        .main-question {
+            font-size: 20px;
+            color: var(--text-primary);
+            margin: 0 0 24px 0;
+            font-weight: 500;
+            letter-spacing: -0.01em;
+        }
+
+        .status-hero {
+            font-size: 110px;
+            font-weight: 900;
+            line-height: 0.9;
+            margin: 16px 0;
+            letter-spacing: -0.04em;
+            transition: color 0.4s ease;
+        }
+
+        .status-hero.yes {
+            color: var(--peak-alert);
+            text-shadow: 0 0 40px rgba(255, 74, 90, 0.25);
+        }
+
+        .status-hero.no {
+            color: var(--offpeak-ok);
+            text-shadow: 0 0 40px rgba(0, 230, 153, 0.25);
+        }
+
+        .info-string {
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-bottom: 40px;
+            letter-spacing: 0.02em;
+        }
+
+        /* Countdown display block */
+        .countdown-wrapper {
+            background: rgba(30, 38, 61, 0.3);
+            border: 1px solid var(--border-ui);
+            border-radius: 6px;
+            padding: 14px;
+            margin-bottom: 32px;
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .countdown-wrapper span {
+            color: var(--text-primary);
+            font-weight: 700;
+            font-variant-numeric: tabular-nums;
+            margin-left: 4px;
+        }
+
+        /* Dual Clock Grid layout */
+        .clock-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            border-top: 1px solid var(--border-ui);
+            padding-top: 28px;
+        }
+
+        .clock-cell {
+            text-align: left;
+        }
+
+        .clock-cell.right {
+            text-align: right;
+        }
+
+        .clock-label {
+            font-size: 11px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-bottom: 6px;
+            display: block;
+        }
+
+        .clock-time {
+            font-size: 16px;
+            font-weight: 600;
+            color: var(--text-primary);
+            font-variant-numeric: tabular-nums;
+        }
+    </style>
+</head>
+<body>
+
+<div class="status-container">
+    <div class="header-label">Z.ai Rate Monitor</div>
+    <h1 class="main-question">Is it peak billing hours?</h1>
+    
+    <!-- State flipper target element -->
+    <div id="statusHero" class="status-hero">--</div>
+    <div id="infoString" class="info-string">Synchronizing timeline metadata...</div>
+
+    <!-- Countdown Timer Element -->
+    <div class="countdown-wrapper" id="countdownBlock">
+        Time until rate shift: <span id="timeRemaining">--h --m --s</span>
+    </div>
+
+    <!-- Live Clocks -->
+    <div class="clock-grid">
+        <div class="clock-cell">
+            <span class="clock-label">Your Local Time</span>
+            <div id="localClock" class="clock-time">00:00:00</div>
+        </div>
+        <div class="clock-cell right">
+            <span class="clock-label">Singapore (SST / UTC+8)</span>
+            <div id="sstClock" class="clock-time">00:00:00</div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function evaluateMetrics() {
+        const nativeNow = new Date();
+        
+        // Translate Client standard time parameters cleanly over to Singapore (UTC+8)
+        const sstParserString = nativeNow.toLocaleString("en-US", { timeZone: "Asia/Singapore" });
+        const sstDateObj = new Date(sstParserString);
+        
+        const dayOfWeek = sstDateObj.getDay(); 
+        const sstHours = sstDateObj.getHours();
+        const sstMinutes = sstDateObj.getMinutes();
+        const sstSeconds = sstDateObj.getSeconds();
+        
+        // Official constraint checks: Weekdays 14:00 to 18:00 SST
+        const isWeekday = dayOfWeek >= 1 && dayOfWeek <= 5;
+        const inPeakFrame = sstHours >= 14 && sstHours < 18;
+        const currentPeakStatus = isWeekday && inPeakFrame;
+
+        // UI Hook Cache links
+        const statusHero = document.getElementById('statusHero');
+        const infoString = document.getElementById('infoString');
+        const localClock = document.getElementById('localClock');
+        const sstClock = document.getElementById('sstClock');
+        const timeRemaining = document.getElementById('timeRemaining');
+
+        // Apply visual updates to structural clock systems
+        const leadingZero = (val) => String(val).padStart(2, '0');
+        sstClock.innerText = `${leadingZero(sstHours)}:${leadingZero(sstMinutes)}:${leadingZero(sstSeconds)}`;
+        localClock.innerText = nativeNow.toLocaleTimeString([], { hour12: false });
+
+        // Calculate and process current status tier and accurate countdown offsets
+        if (currentPeakStatus) {
+            statusHero.className = "status-hero yes";
+            statusHero.innerText = "YES";
+            infoString.innerText = "Flagship API pricing calculations are currently running at 3× multiplier.";
+
+            // Standardize remaining minutes/seconds until 18:00 target threshold
+            let remainingSeconds = ((17 - sstHours) * 3600) + ((59 - sstMinutes) * 60) + (60 - sstSeconds);
+            timeRemaining.innerText = formatTimeDelta(remainingSeconds);
+        } else {
+            statusHero.className = "status-hero no";
+            statusHero.innerText = "NO";
+            infoString.innerText = "Baseline rates are active. Off-peak models consume standard credits or points.";
+
+            // Calculate countdown until next peak window triggers (14:00)
+            let secondsUntilNextShift = 0;
+            if (isWeekday && sstHours < 14) {
+                // Same day window yet to occur
+                secondsUntilNextShift = ((13 - sstHours) * 3600) + ((59 - sstMinutes) * 60) + (60 - sstSeconds);
+                timeRemaining.innerText = formatTimeDelta(secondsUntilNextShift);
+            } else {
+                // If it's a weekend or post-18:00 on a weekday, standard display defaults to target next block logic
+                timeRemaining.innerText = "Next regular weekday shift";
+            }
+        }
+    }
+
+    // Convert raw structural math values into clean string components
+    function formatTimeDelta(totalSecs) {
+        const hrs = Math.floor(totalSecs / 3600);
+        const mins = Math.floor((totalSecs % 3600) / 60);
+        const secs = totalSecs % 60;
+        const pad = (v) => String(v).padStart(2, '0');
+        return `${hrs}h ${pad(mins)}m ${pad(secs)}s`;
+    }
+
+    // Instantly map interval loops down onto clock cycles
+    setInterval(evaluateMetrics, 1000);
+    evaluateMetrics();
+</script>
+
+</body>
+</html>
