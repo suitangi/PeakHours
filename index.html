@@ -3,250 +3,359 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Z.ai Quota Window Status</title>
+    <title>Peak Hours — AI Rate Monitor</title>
+    <script src="peak-hours.js"></script>
+    <script src="providers.js"></script>
     <style>
         :root {
-            --bg-main: #0B0E1A;
-            --card-bg: #121626;
-            --border-ui: #1E263D;
-            --text-primary: #F4F5FF;
-            --text-secondary: #809AFF;
-            --text-muted: #476FDE;
-            --cyan-glow: #00F0FF;
-            --peak-alert: #FF4A5A;
-            --offpeak-ok: #00E699;
+            --bg: #e0e5ec;
+            --text: #3a4252;
+            --text-muted: #7b8496;
+            --shadow-dark: #b8bec9;
+            --shadow-light: #ffffff;
+            --accent: #5b7cfa;
+            --peak: #d9534f;
+            --offpeak: #3bb273;
+            --flat: #8a93a5;
         }
+        html[data-theme="dark"] {
+            --bg: #262a31;
+            --text: #d5dae3;
+            --text-muted: #8b93a1;
+            --shadow-dark: #1d2026;
+            --shadow-light: #30353e;
+            --accent: #7d97ff;
+            --peak: #e06c6c;
+            --offpeak: #4fc98a;
+            --flat: #79818f;
+        }
+
+        * { box-sizing: border-box; }
 
         body {
-            background-color: var(--bg-main);
-            color: var(--text-primary);
+            background: var(--bg);
+            color: var(--text);
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
             margin: 0;
-            padding: 24px;
-            box-sizing: border-box;
+            min-height: 100vh;
+            padding: 32px 20px;
+            transition: background 0.3s ease, color 0.3s ease;
         }
 
-        .status-container {
-            background: var(--card-bg);
-            border: 1px solid var(--border-ui);
-            border-radius: 8px;
-            padding: 48px 32px;
-            max-width: 460px;
-            width: 100%;
-            box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
-            text-align: center;
+        .wrap { max-width: 960px; margin: 0 auto; }
+
+        /* ---------- Neumorphic primitives ---------- */
+        .neu, .neu-inset {
+            border-radius: 16px;
+            background: var(--bg);
+            transition: box-shadow 0.2s ease, background 0.3s ease;
+        }
+        .neu {
+            box-shadow: 8px 8px 16px var(--shadow-dark), -8px -8px 16px var(--shadow-light);
+        }
+        .neu-inset {
+            box-shadow: inset 5px 5px 10px var(--shadow-dark), inset -5px -5px 10px var(--shadow-light);
+        }
+
+        /* ---------- Header ---------- */
+        header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 24px;
+        }
+        .brand { display: flex; align-items: center; gap: 14px; }
+        .brand-mark {
+            width: 44px; height: 44px;
+            display: grid; place-items: center;
+            border-radius: 14px;
+            color: var(--accent);
+        }
+        .brand h1 { font-size: 20px; margin: 0; letter-spacing: -0.02em; }
+        .brand p { margin: 2px 0 0; font-size: 12px; color: var(--text-muted); }
+
+        .theme-toggle {
+            width: 52px; height: 28px;
+            border-radius: 999px;
+            border: none; cursor: pointer;
             position: relative;
+            padding: 0;
         }
-
-        /* Accent top accent stripe mimicking official dev dashboard profiles */
-        .status-container::before {
+        .theme-toggle::after {
             content: '';
             position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            height: 3px;
-            background: linear-gradient(90deg, var(--text-muted), var(--cyan-glow));
-            border-radius: 8px 8px 0 0;
+            top: 4px; left: 4px;
+            width: 20px; height: 20px;
+            border-radius: 50%;
+            background: var(--text-muted);
+            transition: transform 0.25s ease, background 0.3s ease;
         }
+        html[data-theme="dark"] .theme-toggle::after { transform: translateX(24px); }
+        .theme-toggle:active::after { width: 24px; }
 
-        .header-label {
-            font-size: 11px;
-            text-transform: uppercase;
-            letter-spacing: 0.25em;
-            color: var(--text-secondary);
-            margin-bottom: 8px;
-            font-weight: 700;
+        /* ---------- Summary ---------- */
+        .summary {
+            padding: 18px 24px;
+            margin-bottom: 24px;
+            display: flex;
+            align-items: baseline;
+            justify-content: space-between;
+            gap: 16px;
+            flex-wrap: wrap;
         }
+        .summary-text { font-size: 15px; font-weight: 600; }
+        .clock { font-size: 13px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
 
-        .main-question {
-            font-size: 20px;
-            color: var(--text-primary);
-            margin: 0 0 24px 0;
-            font-weight: 500;
-            letter-spacing: -0.01em;
+        /* ---------- Provider picker ---------- */
+        .picker-label {
+            font-size: 11px; text-transform: uppercase;
+            letter-spacing: 0.14em; color: var(--text-muted);
+            margin: 0 0 12px; font-weight: 700;
         }
-
-        .status-hero {
-            font-size: 110px;
-            font-weight: 900;
-            line-height: 0.9;
-            margin: 16px 0;
-            letter-spacing: -0.04em;
-            transition: color 0.4s ease;
+        .picker {
+            display: flex; flex-wrap: wrap; gap: 12px;
+            margin-bottom: 28px;
         }
-
-        .status-hero.yes {
-            color: var(--peak-alert);
-            text-shadow: 0 0 40px rgba(255, 74, 90, 0.25);
-        }
-
-        .status-hero.no {
-            color: var(--offpeak-ok);
-            text-shadow: 0 0 40px rgba(0, 230, 153, 0.25);
-        }
-
-        .info-string {
-            font-size: 13px;
-            color: var(--text-secondary);
-            margin-bottom: 40px;
-            letter-spacing: 0.02em;
-        }
-
-        /* Countdown display block */
-        .countdown-wrapper {
-            background: rgba(30, 38, 61, 0.3);
-            border: 1px solid var(--border-ui);
-            border-radius: 6px;
-            padding: 14px;
-            margin-bottom: 32px;
-            font-size: 13px;
-            color: var(--text-secondary);
-        }
-
-        .countdown-wrapper span {
-            color: var(--text-primary);
-            font-weight: 700;
-            font-variant-numeric: tabular-nums;
-            margin-left: 4px;
-        }
-
-        /* Dual Clock Grid layout */
-        .clock-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
-            border-top: 1px solid var(--border-ui);
-            padding-top: 28px;
-        }
-
-        .clock-cell {
-            text-align: left;
-        }
-
-        .clock-cell.right {
-            text-align: right;
-        }
-
-        .clock-label {
-            font-size: 11px;
+        .chip {
+            border: none; cursor: pointer;
+            padding: 10px 18px;
+            border-radius: 999px;
+            font-size: 13px; font-weight: 600;
             color: var(--text-muted);
-            text-transform: uppercase;
-            letter-spacing: 0.08em;
-            margin-bottom: 6px;
-            display: block;
+            font-family: inherit;
+        }
+        .chip.on { color: var(--accent); }
+        .chip:hover { color: var(--text); }
+        .chip.on:hover { color: var(--accent); }
+
+        /* ---------- Cards ---------- */
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 24px;
+        }
+        .card { padding: 22px 22px 18px; position: relative; overflow: hidden; }
+        .card-top {
+            display: flex; justify-content: space-between;
+            align-items: center; gap: 8px; margin-bottom: 14px;
+        }
+        .card-name { font-size: 15px; font-weight: 700; letter-spacing: -0.01em; }
+        .pill {
+            font-size: 10px; font-weight: 800;
+            text-transform: uppercase; letter-spacing: 0.1em;
+            padding: 5px 10px; border-radius: 999px;
+            box-shadow: inset 3px 3px 6px var(--shadow-dark), inset -3px -3px 6px var(--shadow-light);
+        }
+        .pill.peak { color: var(--peak); }
+        .pill.offpeak { color: var(--offpeak); }
+        .pill.flat { color: var(--flat); }
+
+        .card-status { font-size: 13px; line-height: 1.45; min-height: 56px; margin-bottom: 14px; }
+        .card-status strong { font-size: 14px; }
+        .card-status .next { color: var(--text-muted); }
+        .card-status .next b { color: var(--text); font-variant-numeric: tabular-nums; }
+
+        .card-meta {
+            padding: 12px 14px;
+            border-radius: 12px;
+            font-size: 12px;
+            color: var(--text-muted);
+            line-height: 1.7;
+            margin-bottom: 12px;
+        }
+        .card-meta b { color: var(--text); font-variant-numeric: tabular-nums; }
+
+        .card-note { font-size: 11.5px; color: var(--text-muted); line-height: 1.5; margin-bottom: 12px; }
+        .card-src {
+            font-size: 11px; color: var(--text-muted);
+            text-decoration: none; font-weight: 600;
+        }
+        .card-src:hover { color: var(--accent); }
+
+        .empty {
+            padding: 36px; text-align: center;
+            color: var(--text-muted); font-size: 14px;
         }
 
-        .clock-time {
-            font-size: 16px;
-            font-weight: 600;
-            color: var(--text-primary);
-            font-variant-numeric: tabular-nums;
+        footer {
+            margin-top: 32px;
+            font-size: 11.5px; color: var(--text-muted);
+            text-align: center; line-height: 1.6;
         }
     </style>
 </head>
 <body>
+<div class="wrap">
+    <header>
+        <div class="brand">
+            <div class="brand-mark neu">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="12" cy="13" r="8"/>
+                    <path d="M12 9v4l2.5 2.5"/>
+                    <path d="M9 2h6"/>
+                    <path d="M19.5 7.5 21 6"/>
+                </svg>
+            </div>
+            <div>
+                <h1>Peak Hours</h1>
+                <p>Time-based rate windows across AI providers</p>
+            </div>
+        </div>
+        <button class="theme-toggle neu" id="themeToggle" aria-label="Toggle dark mode" title="Toggle dark mode"></button>
+    </header>
 
-<div class="status-container">
-    <div class="header-label">Z.ai Rate Monitor</div>
-    <h1 class="main-question">Is it peak billing hours?</h1>
-    
-    <!-- State flipper target element -->
-    <div id="statusHero" class="status-hero">--</div>
-    <div id="infoString" class="info-string">Synchronizing timeline metadata...</div>
-
-    <!-- Countdown Timer Element -->
-    <div class="countdown-wrapper" id="countdownBlock">
-        Time until rate shift: <span id="timeRemaining">--h --m --s</span>
+    <div class="summary neu-inset">
+        <div class="summary-text" id="summary">…</div>
+        <div class="clock" id="localClock">--:--:--</div>
     </div>
 
-    <!-- Live Clocks -->
-    <div class="clock-grid">
-        <div class="clock-cell">
-            <span class="clock-label">Your Local Time</span>
-            <div id="localClock" class="clock-time">00:00:00</div>
-        </div>
-        <div class="clock-cell right">
-            <span class="clock-label">Singapore (SST / UTC+8)</span>
-            <div id="sstClock" class="clock-time">00:00:00</div>
-        </div>
-    </div>
+    <p class="picker-label">Track providers</p>
+    <div class="picker" id="picker"></div>
+
+    <div class="grid" id="grid"></div>
+
+    <footer>
+        Windows are defined in each provider's local timezone. Schedules reflect official documentation as of September 2026 and can change — check the linked sources.
+    </footer>
 </div>
 
 <script>
-    function evaluateMetrics() {
-        const nativeNow = new Date();
-        
-        // Translate Client standard time parameters cleanly over to Singapore (UTC+8)
-        const sstParserString = nativeNow.toLocaleString("en-US", { timeZone: "Asia/Singapore" });
-        const sstDateObj = new Date(sstParserString);
-        
-        const dayOfWeek = sstDateObj.getDay(); 
-        const sstHours = sstDateObj.getHours();
-        const sstMinutes = sstDateObj.getMinutes();
-        const sstSeconds = sstDateObj.getSeconds();
-        
-        // Official constraint checks: Weekdays 14:00 to 18:00 SST
-        const isWeekday = dayOfWeek >= 1 && dayOfWeek <= 5;
-        const inPeakFrame = sstHours >= 14 && sstHours < 18;
-        const currentPeakStatus = isWeekday && inPeakFrame;
+    // ---------- Theme ----------
+    const THEME_KEY = 'ph.theme';
+    const theme = localStorage.getItem(THEME_KEY) ||
+        (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+    document.documentElement.dataset.theme = theme;
+    document.getElementById('themeToggle').addEventListener('click', () => {
+        const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+        document.documentElement.dataset.theme = next;
+        localStorage.setItem(THEME_KEY, next);
+    });
 
-        // UI Hook Cache links
-        const statusHero = document.getElementById('statusHero');
-        const infoString = document.getElementById('infoString');
-        const localClock = document.getElementById('localClock');
-        const sstClock = document.getElementById('sstClock');
-        const timeRemaining = document.getElementById('timeRemaining');
+    // ---------- Selection ----------
+    const SELECT_KEY = 'ph.selected';
+    const providers = PeakHours.all();
+    const defaults = providers.filter((p) => !p.flat).map((p) => p.id);
+    let selected;
+    try {
+        selected = JSON.parse(localStorage.getItem(SELECT_KEY)) || defaults;
+    } catch { selected = defaults; }
+    // Drop stale ids from storage written before provider changes.
+    selected = selected.filter((id) => PeakHours.get(id));
 
-        // Apply visual updates to structural clock systems
-        const leadingZero = (val) => String(val).padStart(2, '0');
-        sstClock.innerText = `${leadingZero(sstHours)}:${leadingZero(sstMinutes)}:${leadingZero(sstSeconds)}`;
-        localClock.innerText = nativeNow.toLocaleTimeString([], { hour12: false });
+    function saveSelection() {
+        localStorage.setItem(SELECT_KEY, JSON.stringify(selected));
+    }
 
-        // Calculate and process current status tier and accurate countdown offsets
-        if (currentPeakStatus) {
-            statusHero.className = "status-hero yes";
-            statusHero.innerText = "YES";
-            infoString.innerText = "Flagship API pricing calculations are currently running at 3× multiplier.";
-
-            // Standardize remaining minutes/seconds until 18:00 target threshold
-            let remainingSeconds = ((17 - sstHours) * 3600) + ((59 - sstMinutes) * 60) + (60 - sstSeconds);
-            timeRemaining.innerText = formatTimeDelta(remainingSeconds);
-        } else {
-            statusHero.className = "status-hero no";
-            statusHero.innerText = "NO";
-            infoString.innerText = "Baseline rates are active. Off-peak models consume standard credits or points.";
-
-            // Calculate countdown until next peak window triggers (14:00)
-            let secondsUntilNextShift = 0;
-            if (isWeekday && sstHours < 14) {
-                // Same day window yet to occur
-                secondsUntilNextShift = ((13 - sstHours) * 3600) + ((59 - sstMinutes) * 60) + (60 - sstSeconds);
-                timeRemaining.innerText = formatTimeDelta(secondsUntilNextShift);
+    // ---------- Picker ----------
+    const picker = document.getElementById('picker');
+    for (const p of providers) {
+        const btn = document.createElement('button');
+        btn.className = 'chip neu';
+        btn.textContent = p.name;
+        btn.dataset.id = p.id;
+        btn.addEventListener('click', () => {
+            if (selected.includes(p.id)) {
+                if (selected.length === 1) return; // always track at least one
+                selected = selected.filter((id) => id !== p.id);
             } else {
-                // If it's a weekend or post-18:00 on a weekday, standard display defaults to target next block logic
-                timeRemaining.innerText = "Next regular weekday shift";
+                selected.push(p.id);
             }
+            saveSelection();
+            renderPicker();
+            renderCards();
+        });
+        picker.appendChild(btn);
+    }
+    function renderPicker() {
+        for (const btn of picker.children) {
+            const on = selected.includes(btn.dataset.id);
+            btn.classList.toggle('on', on);
+            btn.classList.toggle('neu-inset', on);
+            btn.classList.toggle('neu', !on);
         }
     }
 
-    // Convert raw structural math values into clean string components
-    function formatTimeDelta(totalSecs) {
-        const hrs = Math.floor(totalSecs / 3600);
-        const mins = Math.floor((totalSecs % 3600) / 60);
-        const secs = totalSecs % 60;
-        const pad = (v) => String(v).padStart(2, '0');
-        return `${hrs}h ${pad(mins)}m ${pad(secs)}s`;
+    // ---------- Cards ----------
+    const grid = document.getElementById('grid');
+    const cards = new Map();
+
+    function cardHTML(p) {
+        return `
+            <div class="card-top">
+                <span class="card-name">${p.name}</span>
+                <span class="pill"></span>
+            </div>
+            <div class="card-status"></div>
+            <div class="card-meta neu-inset">
+                ${p.flat
+                    ? `<div>${PeakHours.describeSchedule(p)}</div>`
+                    : `Peak window: <b>${PeakHours.describeSchedule(p)}</b><br>Now there: <b class="tz-time"></b>`}
+            </div>
+            <div class="card-note">${p.note}</div>
+            <a class="card-src" href="${p.source}" target="_blank" rel="noopener">Source ↗</a>`;
     }
 
-    // Instantly map interval loops down onto clock cycles
-    setInterval(evaluateMetrics, 1000);
-    evaluateMetrics();
-</script>
+    function renderCards() {
+        const shown = providers.filter((p) => selected.includes(p.id));
+        for (const [id, el] of cards) {
+            if (!shown.some((p) => p.id === id)) { el.remove(); cards.delete(id); }
+        }
+        for (const p of shown) {
+            if (!cards.has(p.id)) {
+                const el = document.createElement('div');
+                el.className = 'card neu';
+                el.innerHTML = cardHTML(p);
+                grid.appendChild(el);
+                cards.set(p.id, el);
+            }
+        }
+        update();
+    }
 
+    // ---------- Live update ----------
+    const summaryEl = document.getElementById('summary');
+    const localClock = document.getElementById('localClock');
+
+    function update() {
+        const now = new Date();
+        localClock.textContent = now.toLocaleTimeString([], { hour12: false }) + ' local';
+
+        let inPeak = 0;
+        for (const p of providers.filter((x) => selected.includes(x.id))) {
+            const el = cards.get(p.id);
+            if (!el) continue;
+            const st = PeakHours.evaluate(p, now);
+
+            const pill = el.querySelector('.pill');
+            const status = el.querySelector('.card-status');
+
+            if (p.flat) {
+                pill.textContent = 'Flat';
+                pill.className = 'pill flat';
+                status.innerHTML = `<strong>${p.peak.label}</strong><br>${p.name} charges the same rate at all hours.`;
+            } else {
+                if (st.peak) inPeak++;
+                const cls = st.peak ? 'peak' : 'offpeak';
+                pill.textContent = st.peak ? 'Peak' : 'Off-peak';
+                pill.className = `pill ${cls}`;
+                const rate = st.peak ? p.peak : p.offPeak;
+                status.innerHTML = `<strong style="color:var(--${cls})">${rate.rate}</strong><br>${rate.label}<br>` +
+                    `<span class="next">Next switch in <b>${st.secondsUntilTransition != null ? PeakHours.formatDelta(st.secondsUntilTransition) : '—'}</b></span>`;
+                el.querySelector('.tz-time').textContent =
+                    `${String(st.wall.hour).padStart(2, '0')}:${String(st.wall.minute).padStart(2, '0')}:${String(st.wall.second).padStart(2, '0')}`;
+            }
+        }
+
+        const n = providers.filter((p) => selected.includes(p.id)).length;
+        const trackedWithWindows = providers.filter((p) => selected.includes(p.id) && !p.flat).length;
+        summaryEl.textContent = trackedWithWindows === 0
+            ? `Tracking ${n} provider${n === 1 ? '' : 's'} — none have time-based pricing.`
+            : `${inPeak} of ${trackedWithWindows} provider${trackedWithWindows === 1 ? ' is' : 's are'} in peak billing right now.`;
+    }
+
+    renderPicker();
+    renderCards();
+    setInterval(update, 1000);
+</script>
 </body>
 </html>
